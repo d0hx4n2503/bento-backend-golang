@@ -20,9 +20,9 @@ type Config struct {
 	Store    StoreConfig    `mapstructure:"store"`
 	Session  SessionConfig  `mapstructure:"session"`
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
+	Tracing  TracingConfig  `mapstructure:"tracing"`
 	Logger   LoggerConfig   `mapstructure:"logger"`
 	AWS      AWSConfig      `mapstructure:"aws"`
-	Jaeger   JaegerConfig   `mapstructure:"jaeger"`
 }
 
 type ServerConfig struct {
@@ -90,6 +90,15 @@ type MetricsConfig struct {
 	ServiceName string `mapstructure:"service_name"`
 }
 
+type TracingConfig struct {
+	Enabled       bool    `mapstructure:"enabled"`
+	Endpoint      string  `mapstructure:"endpoint"`
+	ServiceName   string  `mapstructure:"service_name"`
+	ServerAddress string  `mapstructure:"server_address"`
+	Insecure      bool    `mapstructure:"insecure"`
+	SamplingRatio float64 `mapstructure:"sampling_ratio"`
+}
+
 type StoreConfig struct {
 	ImagesFolder string `mapstructure:"images_folder"`
 }
@@ -102,12 +111,6 @@ type AWSConfig struct {
 	MinioEndpoint string `mapstructure:"minio_endpoint"`
 }
 
-type JaegerConfig struct {
-	Host        string `mapstructure:"host"`
-	ServiceName string `mapstructure:"service_name"`
-	LogSpans    bool   `mapstructure:"log_spans"`
-}
-
 // LoadConfig reads a config file. filename can be a path or a file name such
 // as "config-local.yml"; file names are searched for in the current directory
 // and the config/ directory. Environment variables use the APP_ prefix and
@@ -118,6 +121,8 @@ func LoadConfig(filename string) (*viper.Viper, error) {
 	}
 
 	v := viper.New()
+	v.SetDefault("tracing.service_name", "bento-backend-golang")
+	v.SetDefault("tracing.sampling_ratio", 0.1)
 	if filepath.IsAbs(filename) || strings.ContainsAny(filename, `/\\`) {
 		v.SetConfigFile(filename)
 	} else {
