@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -19,6 +20,7 @@ type Config struct {
 	Cookie   CookieConfig   `mapstructure:"cookie"`
 	Store    StoreConfig    `mapstructure:"store"`
 	Session  SessionConfig  `mapstructure:"session"`
+	Auth     AuthConfig     `mapstructure:"auth"`
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
 	Tracing  TracingConfig  `mapstructure:"tracing"`
 	Logger   LoggerConfig   `mapstructure:"logger"`
@@ -26,19 +28,20 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	AppVersion     string        `mapstructure:"app_version"`
-	Port           string        `mapstructure:"port"`
-	PprofPort      string        `mapstructure:"pprof_port"`
-	Mode           string        `mapstructure:"mode"`
-	JWTSecretKey   string        `mapstructure:"jwt_secret_key"`
-	CSRFSecretKey  string        `mapstructure:"csrf_secret_key"`
-	CookieName     string        `mapstructure:"cookie_name"`
-	ReadTimeout    time.Duration `mapstructure:"read_timeout"`
-	WriteTimeout   time.Duration `mapstructure:"write_timeout"`
-	SSL            bool          `mapstructure:"ssl"`
-	ContextTimeout time.Duration `mapstructure:"context_timeout"`
-	CSRF           bool          `mapstructure:"csrf"`
-	Debug          bool          `mapstructure:"debug"`
+	AppVersion         string        `mapstructure:"app_version"`
+	Port               string        `mapstructure:"port"`
+	PprofPort          string        `mapstructure:"pprof_port"`
+	Mode               string        `mapstructure:"mode"`
+	JWTSecretKey       string        `mapstructure:"jwt_secret_key"`
+	CSRFSecretKey      string        `mapstructure:"csrf_secret_key"`
+	CookieName         string        `mapstructure:"cookie_name"`
+	CORSAllowedOrigins []string      `mapstructure:"cors_allowed_origins"`
+	ReadTimeout        time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout       time.Duration `mapstructure:"write_timeout"`
+	SSL                bool          `mapstructure:"ssl"`
+	ContextTimeout     time.Duration `mapstructure:"context_timeout"`
+	CSRF               bool          `mapstructure:"csrf"`
+	Debug              bool          `mapstructure:"debug"`
 }
 
 type LoggerConfig struct {
@@ -69,7 +72,22 @@ type RedisConfig struct {
 }
 
 type MongoDBConfig struct {
-	URI string `mapstructure:"uri"`
+	URI          string `mapstructure:"uri"`
+	DatabaseName string `mapstructure:"database_name"`
+}
+
+// AuthConfig contains identity-provider and JWT settings. Private keys are
+// loaded from files and are never stored in the config file itself.
+type AuthConfig struct {
+	GoogleClientID             string        `mapstructure:"google_client_id"`
+	AccessTokenPrivateKeyPath  string        `mapstructure:"access_token_private_key_path"`
+	AccessTokenPublicKeyPath   string        `mapstructure:"access_token_public_key_path"`
+	RefreshTokenPrivateKeyPath string        `mapstructure:"refresh_token_private_key_path"`
+	RefreshTokenPublicKeyPath  string        `mapstructure:"refresh_token_public_key_path"`
+	AccessTokenTTL             time.Duration `mapstructure:"access_token_ttl"`
+	RefreshTokenTTL            time.Duration `mapstructure:"refresh_token_ttl"`
+	AdminUsername              string        `mapstructure:"admin_username"`
+	AdminPassword              string        `mapstructure:"admin_password"`
 }
 
 type CookieConfig struct {
@@ -159,7 +177,79 @@ func ParseConfig(v *viper.Viper) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+// Validate rejects incomplete or unsafe runtime settings before clients and
+// listeners are started.
+func (c *Config) Validate() error {
+	if c == nil {
+		return fmt.Errorf("config is nil")
+	}
+	if strings.TrimSpace(c.Server.Port) == "" {
+		return fmt.Errorf("server.port is required")
+	}
+	if c.Server.ReadTimeout <= 0 {
+		c.Server.ReadTimeout = 10 * time.Second
+	}
+	if c.Server.WriteTimeout <= 0 {
+		c.Server.WriteTimeout = 15 * time.Second
+	}
+	if c.Server.ContextTimeout <= 0 {
+		c.Server.ContextTimeout = 10 * time.Second
+	}
+	if c.Server.CSRF && len(c.Server.CSRFSecretKey) < 32 {
+		return fmt.Errorf("server.csrf_secret_key must contain at least 32 bytes when CSRF is enabled")
+	}
+	for _, origin := range c.Server.CORSAllowedOrigins {
+		if !isValidCORSOrigin(origin) {
+			return fmt.Errorf("server.cors_allowed_origins contains an invalid origin")
+		}
+	}
+	if strings.TrimSpace(c.MongoDB.URI) == "" {
+		return fmt.Errorf("mongodb.uri is required")
+	}
+	if strings.TrimSpace(c.MongoDB.DatabaseName) == "" {
+		return fmt.Errorf("mongodb.database_name is required")
+	}
+	if strings.TrimSpace(c.Redis.Address) == "" {
+		return fmt.Errorf("redis.address is required")
+	}
+	if strings.TrimSpace(c.Auth.GoogleClientID) == "" {
+		return fmt.Errorf("auth.google_client_id is required")
+	}
+	if c.Auth.AccessTokenTTL <= 0 {
+		c.Auth.AccessTokenTTL = 15 * time.Minute
+	}
+	if c.Auth.RefreshTokenTTL <= 0 {
+		c.Auth.RefreshTokenTTL = 7 * 24 * time.Hour
+	}
+	if c.Auth.AccessTokenTTL >= c.Auth.RefreshTokenTTL {
+		return fmt.Errorf("auth.access_token_ttl must be shorter than auth.refresh_token_ttl")
+	}
+	keyPaths := []struct{ name, path string }{
+		{"auth.access_token_private_key_path", c.Auth.AccessTokenPrivateKeyPath},
+		{"auth.access_token_public_key_path", c.Auth.AccessTokenPublicKeyPath},
+		{"auth.refresh_token_private_key_path", c.Auth.RefreshTokenPrivateKeyPath},
+		{"auth.refresh_token_public_key_path", c.Auth.RefreshTokenPublicKeyPath},
+	}
+	for _, keyPath := range keyPaths {
+		if strings.TrimSpace(keyPath.path) == "" {
+			return fmt.Errorf("%s is required", keyPath.name)
+		}
+	}
+	return nil
+}
+
+func isValidCORSOrigin(origin string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(origin))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || strings.Contains(parsed.Host, "*") || strings.HasSuffix(parsed.Host, ":") || parsed.User != nil || parsed.Opaque != "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return false
+	}
+	return parsed.Path == "" || parsed.Path == "/"
 }
 
 func bindEnvironment(v *viper.Viper, prefix string, typ reflect.Type) error {

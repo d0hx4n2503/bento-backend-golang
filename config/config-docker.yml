@@ -1,0 +1,41 @@
+server:
+  app_version: latest
+  port: ":4001"
+  mode: production
+  read_timeout: 10s
+  write_timeout: 15s
+  context_timeout: 10s
+  csrf: true
+  debug: false
+
+mongodb:
+  uri: mongodb://mongodb:27017
+  database_name: bento
+
+redis:
+  address: redis:6379
+
+auth:
+  access_token_private_key_path: /run/secrets/access_token_private_key
+  access_token_public_key_path: /run/secrets/access_token_public_key
+  refresh_token_private_key_path: /run/secrets/refresh_token_private_key
+  refresh_token_public_key_path: /run/secrets/refresh_token_public_key
+  access_token_ttl: 15m
+  refresh_token_ttl: 168h
+
+cookie:
+  secure: true
+  http_only: true
+
+logger:
+  development: false
+  encoding: json
+  level: info
+
+metrics:
+  service_name: bento_backend_golang
+
+tracing:
+  enabled: false
+  service_name: bento-backend-golang
+  sampling_ratio: 0.1

@@ -1,0 +1,44 @@
+server:
+  app_version: development
+  port: ":4001"
+  mode: development
+  cors_allowed_origins:
+    - http://localhost:3000
+    - http://localhost:5173
+  read_timeout: 10s
+  write_timeout: 15s
+  context_timeout: 10s
+  csrf: false
+  debug: true
+
+mongodb:
+  uri: mongodb://localhost:27017
+  database_name: bento
+
+redis:
+  address: localhost:6379
+
+auth:
+  access_token_private_key_path: ../backend/secure/access_token_private.key
+  access_token_public_key_path: ../backend/secure/access_token_public.key
+  refresh_token_private_key_path: ../backend/secure/refresh_token_private.key
+  refresh_token_public_key_path: ../backend/secure/refresh_token_public.key
+  access_token_ttl: 15m
+  refresh_token_ttl: 168h
+
+cookie:
+  secure: false
+  http_only: true
+
+logger:
+  development: true
+  encoding: console
+  level: debug
+
+metrics:
+  service_name: bento_backend_golang
+
+tracing:
+  enabled: false
+  service_name: bento-backend-golang
+  sampling_ratio: 0.1
