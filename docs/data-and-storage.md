@@ -5,7 +5,7 @@ description: Defines the intended MongoDB repository boundary and records the cu
 tags: [bento-backend, golang, mongodb, data]
 sources:
   - resource: ../internal/infrastructure/mongodb/conn.go
-    title: MongoDB connection placeholder
+    title: MongoDB client connection
   - resource: ../migrations/mongodb/.gitkeep
     title: MongoDB migrations placeholder
   - resource: ../config/config.go
@@ -19,19 +19,19 @@ sources:
 
 MongoDB is the target store for new feature persistence. The MongoDB client belongs to `internal/infrastructure/mongodb`; feature-specific query and mapping code belongs to the feature that owns the data.
 
-At the time this page was written, `internal/infrastructure/mongodb/conn.go` is empty, `migrations/mongodb` has only a placeholder, and `go.mod` does not declare the MongoDB Go driver. The repository is therefore not yet configured for MongoDB-backed feature code. Add the driver and lifecycle implementation as part of the first concrete persistence change, rather than importing an undocumented driver in a feature package.
+The API uses the MongoDB v2 driver through `internal/infrastructure/mongodb`. Google sign-in stores users in the existing `users` collection and creates unique email and Google subject indexes at startup. The migration directory still has only a placeholder; the sign-in repository currently ensures its indexes during startup. Broader schema migration tooling remains to be implemented.
 
 ## Repository boundary
 
 Use a feature-owned adapter to implement a port declared by that feature's use case:
 
 ```text
-internal/features/<feature>/usecase/      port consumed by workflow
-internal/features/<feature>/repository/mongodb/  MongoDB implementation
-internal/infrastructure/mongodb/          shared client and lifecycle
+internal/features/<feature>/mongo_repository.go       repository interface
+internal/features/<feature>/repository/mongodb/       MongoDB implementation
+internal/infrastructure/mongodb/                      shared client and lifecycle
 ```
 
-Repositories should accept `context.Context`, take feature-level values as inputs, and return domain or application types. Keep Mongo filters, BSON documents, collection names, index names, and driver errors inside the adapter. Do not expose `*mongo.Client`, `*mongo.Collection`, `bson.M`, or database-specific identifiers through domain/use-case APIs.
+Repositories should accept `context.Context`, take feature models as inputs, and return models or application results. Keep Mongo filters, BSON documents, collection names, index names, and driver errors inside the adapter. Do not expose `*mongo.Client`, `*mongo.Collection`, `bson.M`, or database-specific identifiers through feature contracts.
 
 The feature owns its data access. A different feature should call an explicit use case or consume a stable event/API; it should not query another feature's collection directly. If two features need the same underlying record, first determine its business owner and define the read contract there.
 

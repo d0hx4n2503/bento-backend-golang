@@ -4,12 +4,12 @@ title: Feature implementation guide
 description: Gives one consistent implementation pattern for Go features and their adapters.
 tags: [bento-backend, golang, implementation, clean-architecture]
 sources:
-  - resource: ../internal/features/auth/usecase/ports.go
-    title: Auth use case port scaffold
-  - resource: ../internal/features/auth/delivery/interface.go
-    title: Auth delivery scaffold
-  - resource: ../internal/app/.gitkeep
-    title: Application composition root placeholder
+  - resource: ../internal/features/auth/usecase.go
+    title: Auth use case contract
+  - resource: ../internal/features/auth/delivery.go
+    title: Auth delivery contract
+  - resource: ../internal/transport/http/handlers.go
+    title: Feature wiring and route registration
 ---
 # Feature implementation guide
 
@@ -19,62 +19,57 @@ Use this sequence when implementing a feature. Start with the behavior and its o
 
 Before writing code, identify the feature that owns the invariant and data. Read the corresponding NestJS service, controller, DTOs, schemas, processors, and any shared helpers that affect the behavior. Record the existing API contract and behavior that must remain compatible. Do not turn a NestJS controller/service/schema file into a one-to-one Go file translation.
 
-If two Go features need the same behavior, decide whether it is a real shared capability or whether one feature owns a use case that the other should call. Avoid importing another feature's MongoDB repository or domain storage model.
+If two Go features need the same behavior, decide whether it is a real shared capability or whether one feature owns a use case that the other should call. Avoid importing another feature's MongoDB repository or internal storage model.
 
-## 2. Put business rules in the domain
+## 2. Put shared data shapes in models
 
-Domain packages define feature-owned entities, value types, invariants, and errors. Keep them independent of Echo, MongoDB BSON types, Redis, HTTP status codes, and external SDKs. Prefer unexported implementation details; export only names another layer needs.
+Place persisted and cross-layer data shapes in `internal/models/<feature>_model.go`, following the repository convention. Keep the feature root for interfaces only. Put feature-owned errors and business rules/normalization in `internal/features/<feature>/domain/` when needed. Here, `domain` is a small folder for rules and errors; it does not mean every feature needs a separate entity/model layer. Models describe data; use cases coordinate workflows, and domain helpers enforce feature invariants.
 
-## 3. Put orchestration and ports in the use case
+## 3. Declare one feature contract per root file
 
-The use case owns the application workflow and the interfaces it needs. Define an interface in the package that consumes it. Keep request/response DTOs at the delivery boundary unless they represent application-level commands/results shared by multiple adapters.
+Declare use-case, repository, provider, and handler interfaces at the feature root, with one interface per file. Implement each interface in its responsibility subfolder and return that interface from its constructor. Keep request parsing and HTTP response details in delivery handlers.
 
 ```go
-package usecase
+package users
 
-type UserReader interface {
-	FindByID(ctx context.Context, id string) (domain.User, error)
-}
+import (
+    "context"
 
-type GetUser struct {
-	users UserReader
-}
+    "github.com/d0hx4n2503/bento-backend-golang/internal/models"
+)
 
-func NewGetUser(users UserReader) *GetUser {
-	return &GetUser{users: users}
+type Usecase interface {
+    GetUser(ctx context.Context, id string) (models.User, error)
 }
 ```
 
-This is an illustrative pattern, not a compiled feature implementation. The real use case should define its own context, input, output, and error behavior.
+The interface is declared once at the feature root; its implementation lives in `usecase/`.
 
 ## 4. Implement adapters at the edge
 
-An HTTP delivery adapter parses transport input, calls a use case, and maps its result to the API contract. A MongoDB repository implements the use-case port and maps between BSON documents and domain types. It should not return `bson.M`, `*mongo.Collection`, or driver errors as part of a public feature API.
+An HTTP delivery adapter parses transport input, calls the use case, and maps its result to the API contract. A MongoDB repository implements the feature’s repository interface and maps BSON documents to models. It should not return `bson.M`, `*mongo.Collection`, or raw driver errors as part of a public feature API.
 
 ```go
 package mongodb
 
-var _ usecase.UserReader = (*UserRepository)(nil)
+var _ users.MongoRepository = (*userRepository)(nil)
 ```
 
 Use compile-time interface assertions for adapters where they clarify the contract. Translate vendor errors at the adapter boundary into stable feature/application errors so use cases and handlers do not inspect raw driver strings.
 
 ## 5. Wire dependencies in the composition root
 
-`cmd/api` should delegate construction to `internal/app`. The composition root loads configuration, creates shared infrastructure clients, constructs feature repositories and use cases, registers transport handlers, and owns graceful shutdown. Pass dependencies through constructors. Do not create clients in handlers, feature package `init` functions, or hidden globals.
+`cmd/api` delegates process startup to `internal/app`. The app initializes shared infrastructure; `internal/transport/http.Server` constructs repositories, use cases, and handlers, creates route groups, registers feature routes, and owns HTTP serving and graceful shutdown. Pass dependencies through constructors. Do not create clients in handlers, feature package `init` functions, or hidden globals.
 
 ## 6. Keep each feature consistent
 
-For every feature, use the same conceptual flow:
+Build and connect feature code in this order:
 
 ```text
-delivery -> usecase -> domain
-                 ^
-                 |
-       repository adapter implements usecase port
+models -> repository -> usecase -> handler -> route
 ```
 
-Naming and folder presence can vary with feature complexity. The dependency direction and responsibility boundaries should not. A feature with no persistence does not need a `repository/mongodb` directory; a feature with no HTTP endpoint does not need an HTTP handler.
+At runtime, calls move in the opposite direction: route to handler to use case to repository. A feature with no persistence does not need a `repository/mongodb` directory; a feature with no HTTP endpoint does not need an HTTP handler.
 
 ## Go package conventions
 
@@ -82,18 +77,18 @@ Naming and folder presence can vary with feature complexity. The dependency dire
 - Pass `context.Context` as the first parameter for I/O and cancellable operations. Do not store request contexts in long-lived structs.
 - Wrap errors with `%w` when callers may need `errors.Is` or `errors.As`; use stable sentinel or typed errors for expected application outcomes.
 - Return errors instead of panicking for normal failures. Add context at boundaries without repeatedly logging the same error at every layer.
-- Keep HTTP and storage models separate from domain types when their shape or lifecycle differs.
+- Keep provider HTTP response models and persisted user models separate when their shape or lifecycle differs; place each in the matching `internal/models/<feature>_model.go` file.
 - Avoid cross-feature cycles. If two packages need a type, place it with its owner or introduce a small interface/type package with an explicit reason.
-- Apply `gofmt` to changed Go files. Add or update tests as part of normal feature implementation; this scaffold repository does not yet provide a complete verified test/build pipeline.
+- Apply `gofmt` to changed Go files and run `go test ./...`. Add focused tests for non-trivial behavior and edge cases.
 
 ## Change checklist
 
 Before a feature change is ready for review, confirm:
 
 1. The feature owner and externally visible behavior are clear.
-2. Domain and use-case packages do not import transport or vendor drivers.
+2. Use-case implementations do not import transport packages or vendor drivers.
 3. Interfaces are defined by the consuming use case, not by an infrastructure package “just in case.”
 4. Shared behavior was searched for in the [reusable package catalog](reusable-packages.md).
 5. MongoDB mappings and query behavior stay inside the feature adapter.
-6. `internal/app` is the only place that wires concrete adapters into use cases.
-7. The feature follows the same dependency flow as existing features, or documents why a different boundary is needed.
+6. `internal/transport/http.Server` wires concrete adapters into use cases; `internal/app` owns shared process dependencies.
+7. `gofmt` and `go test ./...` pass; the feature follows the same dependency flow as existing features, or documents why a different boundary is needed.

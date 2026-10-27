@@ -19,16 +19,17 @@ sources:
 
 ## Configuration loading
 
-`config.LoadConfig(filename)` reads an explicit path, or searches the current directory and `config/` for a bare filename. It binds environment variables with the `APP_` prefix and maps nested keys to uppercase underscore-separated names. For example, `server.port` maps to `APP_SERVER_PORT`. `config.ParseConfig` decodes the Viper instance into `config.Config`.
+`config.LoadConfig(filename)` reads an explicit path, or searches the current directory and `config/` for a bare filename. It binds environment variables with the `APP_` prefix and maps nested keys to uppercase underscore-separated names. For example, `server.port` maps to `APP_SERVER_PORT`. `make run` sources `.env` before starting the process; direct `go run` uses only environment variables already exported by the shell. `config.ParseConfig` decodes the Viper instance into `config.Config`.
 
 The current config schema declares these sections:
 
 | Section | Declared fields / purpose |
 | --- | --- |
-| `server` | Version, ports, mode, JWT/CSRF secrets, cookie name, timeouts, SSL, debug flags |
+| `server` | Version, ports, mode, JWT/CSRF secrets, cookie name, exact CORS origins, timeouts, SSL, debug flags |
 | `postgres` | Host, port, user, password, database, SSL mode, driver |
 | `redis` | Address, password, DB, idle connections, pool size, pool timeout |
-| `mongodb` | URI |
+| `mongodb` | URI and database name |
+| `auth` | Google OAuth client ID, RS256 key paths, access/refresh token lifetimes, optional admin credentials |
 | `cookie` | Name, max age, secure, HTTP-only flags |
 | `store` | Image storage folder |
 | `session` | Prefix, name, expiry |
@@ -37,7 +38,11 @@ The current config schema declares these sections:
 | `logger` | Development mode, caller/stacktrace settings, encoding, level |
 | `aws` | Endpoint, access keys, TLS flag, MinIO endpoint |
 
-The YAML files and `.env.example` are empty at present. The loader supplies tracing defaults (`service_name=bento-backend-golang`, `sampling_ratio=0.1`), but most fields do not have defaults or validation in this package. Add validation for required values and invalid ranges before starting clients. Keep secrets out of committed configuration files and logs.
+`config-local.yml` and `config-docker.yml` provide non-secret defaults for the API. Startup validation requires MongoDB URI/database, Redis address, four RS256 key paths, an HTTP port, and `APP_AUTH_GOOGLE_CLIENT_ID`. Set `APP_SERVER_CORS_ALLOWED_ORIGINS` to a comma-separated list of exact frontend origins; wildcard subdomains are rejected. Local config allows `http://localhost:3000` and `http://localhost:5173`; Docker config has no browser origins by default, so production deployments must explicitly configure theirs. Google sign-in introspects the frontend's OAuth access token through `https://oauth2.googleapis.com/tokeninfo` and requires `aud` and `azp` to equal this configured client ID, a future expiry, an `openid` scope, an email scope, a subject, and `email_verified=true`. The verifier limits token and response sizes, uses a five-second timeout, refuses redirects, and does not include the token in returned transport errors. Because Google describes access-token tokeninfo as diagnostic introspection ([token types](https://cloud.google.com/docs/authentication/token-types)) and recommends verified ID tokens for backend sign-in in production ([backend authentication guidance](https://developers.google.com/identity/sign-in/web/backend-auth)), do not log or expose access tokens; migrate the frontend to an ID token or authorization-code flow for the stronger production design. Existing accounts are not linked automatically by email equality; provide an explicit link flow if legacy accounts without a Google subject need access.
+
+Token lifetime defaults are 15 minutes for access tokens and 7 days for refresh tokens; refresh must outlive access. When CSRF is enabled, its dedicated secret must contain at least 32 bytes. Keep secrets and private keys out of committed configuration files and logs.
+
+The API composition root initializes logging, metrics, optional tracing, MongoDB, Redis, auth/sign-in dependencies, shared HTTP middleware, and routes. Redis backs the shared 100,000 requests per IP per minute and 500,000 requests per minute global ceilings. `/api/health` reports MongoDB readiness and `/metrics` exposes Prometheus metrics. SIGINT/SIGTERM triggers bounded graceful shutdown of the HTTP server and shared clients/providers.
 
 ## Logging
 

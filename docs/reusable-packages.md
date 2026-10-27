@@ -41,7 +41,7 @@ This page is the first place to check before adding a general-purpose helper. Pr
 | --- | --- | --- |
 | `pkg/converter.AnyToBytesBuffer` | JSON-marshals a value into a `bytes.Buffer` without a newline | Use only when a caller specifically needs a buffer. For ordinary JSON bytes, `json.Marshal` is simpler. |
 | `pkg/csrf.MakeToken`, `ValidateToken` | Creates and verifies a session-bound HMAC CSRF token | `internal/transport/http/middleware/csrf.go` should enforce the HTTP policy by calling these primitives; do not reimplement the HMAC there. Use a dedicated secret of at least 32 bytes. |
-| `pkg/httpErrors` | Current REST-shaped errors, error classification, and status values | Legacy boundary helper. New domain/use-case errors should not depend on `net/http` or REST response types. `NewRestError` and `NewRestErrorWithMessage` currently construct the same value; `ErrorResponse` calls `ParseErrors` twice. |
+| `pkg/httpErrors` | Current REST-shaped errors, error classification, and status values | Legacy boundary helper. New feature errors should not depend on `net/http` or REST response types. `NewRestError` and `NewRestErrorWithMessage` currently construct the same value; `ErrorResponse` calls `ParseErrors` twice. |
 | `pkg/sanitize.SanitizeJSON` | Sanitizes HTML in every string value in a JSON document | Only use for fields intentionally rendered as user-authored HTML. It changes stored values and is not a replacement for output escaping. Do not add a second generic sanitizer in HTTP middleware. |
 | `pkg/statusModel.Status` | Status string type with Pending, Processed, Cancelled, UnderReview, and Overdue constants | Confirm these statuses are truly shared across features. If they belong to one business capability, move ownership to that feature instead of expanding this package. |
 | `pkg/utils.PaginationQuery` and helpers | Parses Echo query parameters and calculates page values | Current code has edge cases: blank `page` sets `Size` to zero, and total/has-more helpers do not guard zero or negative sizes. Do not treat it as production-ready until corrected. |
@@ -54,7 +54,7 @@ This page is the first place to check before adding a general-purpose helper. Pr
 | `internal/infrastructure/redis.NewRedisClient` | Constructs a Redis client from the shared config | The composition root owns connection checks and closing the client. |
 | `config.LoadConfig`, `ParseConfig` | Loads Viper settings, binds `APP_` environment variables, decodes typed config | Use as the single config loading path; do not parse environment variables separately in features. |
 
-`pkg/utils/auth.go`, `http.go`, and `jwt.go` are empty placeholders. They do not provide functions to reuse yet. Authentication and JWT feature behavior should be placed after deciding whether it belongs to `auth`, `oauth`, or `signin`; middleware should only adapt the chosen use case/policy to HTTP.
+`pkg/utils/auth.go`, `http.go`, and `jwt.go` remain placeholders. The auth feature implements Bento session JWT issuance and verification in `internal/features/auth/usecase`; its HTTP adapter is under `internal/features/auth/delivery/http`. Transport auth middleware delegates token verification to that use case. OAuth client tokens remain owned by the separate `oauth` feature.
 
 ## Middleware and package responsibilities
 
@@ -62,14 +62,14 @@ Middleware is an adapter, not a second implementation of a capability. Keep the 
 
 | Concern | Shared implementation / owner | HTTP adapter |
 | --- | --- | --- |
-| CSRF token algorithm | `pkg/csrf` today | `internal/transport/http/middleware/csrf.go` when implemented |
+| CSRF token algorithm | `pkg/csrf` today | `internal/transport/http/middleware/csrf.go` |
 | Request authentication | Feature use case or auth policy, to be defined | `internal/transport/http/middleware/auth.go` |
-| Request sanitization | Explicit input boundary for fields requiring HTML sanitization | `middleware/sanitize.go` only if a concrete HTTP policy needs it; do not sanitize all JSON globally by default |
+| Request sanitization | Explicit input boundary for fields requiring HTML sanitization | No generic sanitization middleware; do not sanitize all JSON globally by default |
 | Metrics | `internal/infrastructure/observability/metrics` | `middleware/metrics.go` records HTTP observations |
 | Tracing | `internal/infrastructure/observability/tracing` initializes provider | `middleware/tracing.go` instruments Echo |
 | HTTP error serialization | `internal/transport/http` | `http_error.go` should own status/body mapping for the transport |
 
-The middleware files other than tracing are currently empty. Their names do not mean their behavior has already been implemented.
+Authentication, CSRF, CORS, metrics, rate limiting, request logging, and tracing middleware are implemented. `debug.go` and `middlewares.go` are empty placeholders.
 
 ## Avoiding duplicate code
 
@@ -82,4 +82,4 @@ Before adding a helper, search for the capability name and behavior, then ask:
 5. Will more than one feature consume it, and is there no single feature owner? Consider `internal/shared/<capability>`.
 6. Is it intentionally supported as a reusable API outside `internal`? Only then consider `pkg/<capability>`.
 
-There is currently no implemented duplicate of the future auth, CSRF, metrics, request logging, or sanitization middleware: those middleware source files are empty. The main overlap risk is architectural: `pkg/httpErrors` and the empty `internal/transport/http/http_error.go` could both grow into HTTP error mappers. Keep application/domain errors transport-neutral and assign response serialization to `internal/transport/http` as the HTTP edge is implemented.
+There is no separate copy of these shared middleware behaviors in `pkg`. The main overlap risk is architectural: `pkg/httpErrors` and `internal/transport/http/http_error.go` can both map errors to HTTP responses. Keep feature errors transport-neutral and assign response serialization to `internal/transport/http`.
