@@ -3,7 +3,7 @@ package middleware
 import (
 	"fmt"
 
-	echootel "github.com/labstack/echo-otel/v5"
+	echoOTel "github.com/labstack/echo-otel/v5"
 	"github.com/labstack/echo/v5"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
@@ -13,7 +13,7 @@ import (
 // Trace Context and Baggage headers. serverAddress should be a canonical host,
 // optionally followed by a port; leave it empty when that value is not known.
 func NewTracingMiddleware(serverAddress string, provider trace.TracerProvider) (echo.MiddlewareFunc, error) {
-	config := echootel.Config{
+	config := echoOTel.Config{
 		ServerName:     serverAddress,
 		TracerProvider: provider,
 		Propagators: propagation.NewCompositeTextMapPropagator(
