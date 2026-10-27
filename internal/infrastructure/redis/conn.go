@@ -5,12 +5,12 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// Returns new redis client
+// NewRedisClient constructs a client for the shared Redis deployment.
 func NewRedisClient(cfg *config.Config) *redis.Client {
 	redisHost := cfg.Redis.Address
 
 	if redisHost == "" {
-		redisHost = ":6379"
+		redisHost = "localhost:6379"
 	}
 
 	client := redis.NewClient(&redis.Options{
@@ -18,8 +18,8 @@ func NewRedisClient(cfg *config.Config) *redis.Client {
 		MinIdleConns: cfg.Redis.MinIdleConns,
 		PoolSize:     cfg.Redis.PoolSize,
 		PoolTimeout:  cfg.Redis.PoolTimeout,
-		Password:     cfg.Redis.Password, // no password set
-		DB:           cfg.Redis.DB,       // use default DB
+		Password:     cfg.Redis.Password,
+		DB:           cfg.Redis.DB,
 	})
 
 	return client

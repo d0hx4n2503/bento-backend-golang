@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.39.0"
+	sdkTrace "go.opentelemetry.io/otel/sdk/trace"
+	semConv "go.opentelemetry.io/otel/semconv/v1.39.0"
 )
 
 // Config controls the OTLP trace exporter and sampling policy.
@@ -30,7 +30,7 @@ type Config struct {
 // Endpoint accepts either "host:port" or a URL such as
 // "https://collector.example.com:4317". If omitted, the OTLP exporter uses its
 // standard environment variables and localhost default.
-func Initialize(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, error) {
+func Initialize(ctx context.Context, cfg Config) (*sdkTrace.TracerProvider, error) {
 	if ctx == nil {
 		return nil, errors.New("tracing context is required")
 	}
@@ -61,17 +61,17 @@ func Initialize(ctx context.Context, cfg Config) (*sdktrace.TracerProvider, erro
 
 	res, err := resource.New(ctx,
 		resource.WithTelemetrySDK(),
-		resource.WithAttributes(semconv.ServiceName(serviceName)),
+		resource.WithAttributes(semConv.ServiceName(serviceName)),
 	)
 	if err != nil {
 		_ = exporter.Shutdown(ctx)
 		return nil, fmt.Errorf("create tracing resource: %w", err)
 	}
 
-	provider := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(exporter),
-		sdktrace.WithResource(res),
-		sdktrace.WithSampler(sdktrace.ParentBased(sdktrace.TraceIDRatioBased(cfg.SamplingRatio))),
+	provider := sdkTrace.NewTracerProvider(
+		sdkTrace.WithBatcher(exporter),
+		sdkTrace.WithResource(res),
+		sdkTrace.WithSampler(sdkTrace.ParentBased(sdkTrace.TraceIDRatioBased(cfg.SamplingRatio))),
 	)
 	otel.SetTracerProvider(provider)
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
