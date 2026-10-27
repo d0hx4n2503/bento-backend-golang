@@ -42,11 +42,11 @@ The current config schema declares these sections:
 
 Token lifetime defaults are 15 minutes for access tokens and 7 days for refresh tokens; refresh must outlive access. When CSRF is enabled, its dedicated secret must contain at least 32 bytes. Keep secrets and private keys out of committed configuration files and logs.
 
-The API composition root initializes logging, metrics, optional tracing, MongoDB, Redis, auth/sign-in dependencies, shared HTTP middleware, and routes. Redis backs the shared 100,000 requests per IP per minute and 500,000 requests per minute global ceilings. `/api/health` reports MongoDB readiness and `/metrics` exposes Prometheus metrics. SIGINT/SIGTERM triggers bounded graceful shutdown of the HTTP server and shared clients/providers.
+The API composition root initializes logging, metrics, optional tracing, MongoDB, Redis, auth/sign-in dependencies, shared HTTP middleware, and routes. `cmd/api` loads configuration and owns the configured logger; `internal/app` receives it and wires the shared dependencies. Redis backs the shared 100,000 requests per IP per minute and 500,000 requests per minute global ceilings. `/api/health` reports MongoDB readiness and `/metrics` exposes Prometheus metrics. SIGINT/SIGTERM triggers bounded graceful shutdown of the HTTP server and shared clients/providers.
 
 ## Logging
 
-`internal/infrastructure/observability/logger.NewZapLogger` creates a Zap-backed logger that writes to stderr. It accepts development mode, encoding (`json` or `console`), level, caller, and stacktrace settings. The composition root should create it once, pass a narrow interface to consumers, and call `Sync` during shutdown. Avoid logging the same error in every layer; log once where the error is handled or where useful operational context is known.
+`internal/infrastructure/observability/logger.NewZapLogger` creates a Zap-backed logger that writes to stderr. It accepts development mode, encoding (`json` or `console`), level, caller, and stacktrace settings. `cmd/api` creates a bootstrap logger for configuration failures, then creates the configured application logger and passes it into `internal/app`. The entrypoint owns `Sync` during shutdown. Request logs use structured fields such as method, route template, status, duration, and request ID; they do not include query strings or credentials. Avoid logging the same error in every layer; log once where the error is handled or where useful operational context is known.
 
 ## Metrics
 
@@ -62,4 +62,4 @@ Metrics server address and route registration are not wired yet. Keep the listen
 
 ## Startup and shutdown ownership
 
-`internal/app` should own the order of configuration parsing, logger and client creation, tracing initialization, handler registration, server start, signal handling, and cleanup. Each constructed client/provider must have one clear shutdown owner. Avoid independent setup paths in `cmd/api`, handlers, or middleware.
+`cmd/api` owns configuration loading, logger creation, signal handling, and logger flushing. `internal/app` owns tracing and client creation, handler registration, server start, and cleanup. Each constructed client/provider must have one clear shutdown owner. Avoid independent setup paths in handlers or middleware.

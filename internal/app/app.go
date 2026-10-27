@@ -19,33 +19,29 @@ import (
 )
 
 // Run wires the API process and owns the lifecycle of its shared dependencies.
-func Run(ctx context.Context, cfg *config.Config) error {
+func Run(ctx context.Context, cfg *config.Config, log logger.Logger) error {
 	if ctx == nil {
 		return fmt.Errorf("application context is required")
 	}
 	if cfg == nil {
 		return fmt.Errorf("application configuration is required")
 	}
+	if log == nil {
+		return fmt.Errorf("application logger is required")
+	}
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
-
-	log, err := logger.NewZapLogger(logger.Config{
-		Development:       cfg.Logger.Development,
-		DisableCaller:     cfg.Logger.DisableCaller,
-		DisableStacktrace: cfg.Logger.DisableStacktrace,
-		Encoding:          cfg.Logger.Encoding,
-		Level:             cfg.Logger.Level,
-	})
-	if err != nil {
-		return fmt.Errorf("initialize logger: %w", err)
-	}
-	defer func() { _ = log.Sync() }()
+	log.Infow("starting API application",
+		"version", cfg.Server.AppVersion,
+		"mode", cfg.Server.Mode,
+	)
 
 	metricRecorder, err := metrics.NewPrometheusMetrics(metricsServiceName(cfg))
 	if err != nil {
 		return fmt.Errorf("initialize metrics: %w", err)
 	}
+	log.Infow("initialized Prometheus metrics", "service_name", metricsServiceName(cfg))
 
 	var tracerProvider *sdkTrace.TracerProvider
 	if cfg.Tracing.Enabled {
@@ -60,11 +56,12 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		if err != nil {
 			return fmt.Errorf("initialize tracing: %w", err)
 		}
+		log.Infow("initialized OpenTelemetry tracing", "service_name", cfg.Tracing.ServiceName)
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if shutdownErr := tracerProvider.Shutdown(shutdownCtx); shutdownErr != nil {
-				log.Errorf("shut down tracing provider: %v", shutdownErr)
+				log.Errorw("failed to shut down tracing provider", "error", shutdownErr)
 			}
 		}()
 	}
@@ -79,11 +76,12 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("initialize MongoDB: %w", err)
 	}
+	log.Infow("connected to MongoDB", "database", cfg.MongoDB.DatabaseName)
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if shutdownErr := client.Disconnect(shutdownCtx); shutdownErr != nil {
-			log.Errorf("disconnect MongoDB client: %v", shutdownErr)
+			log.Errorw("failed to disconnect MongoDB client", "error", shutdownErr)
 		}
 	}()
 
@@ -95,9 +93,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		_ = redisClient.Close()
 		return fmt.Errorf("connect to Redis: %w", err)
 	}
+	log.Info("connected to Redis")
 	defer func() {
 		if closeErr := redisClient.Close(); closeErr != nil {
-			log.Errorf("close Redis client: %v", closeErr)
+			log.Errorw("failed to close Redis client", "error", closeErr)
 		}
 	}()
 

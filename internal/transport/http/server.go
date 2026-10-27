@@ -123,7 +123,10 @@ func (s *Server) Run(ctx context.Context) error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		s.dependencies.Logger.Infof("HTTP server listening address=%s version=%s", address, s.cfg.Server.AppVersion)
+		s.dependencies.Logger.Infow("HTTP server listening",
+			"address", address,
+			"version", s.cfg.Server.AppVersion,
+		)
 		serverErr <- server.Serve(listener)
 	}()
 
@@ -134,6 +137,7 @@ func (s *Server) Run(ctx context.Context) error {
 		}
 		return fmt.Errorf("serve HTTP: %w", err)
 	case <-ctx.Done():
+		s.dependencies.Logger.Info("HTTP server shutdown started")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
@@ -142,6 +146,7 @@ func (s *Server) Run(ctx context.Context) error {
 		if err := <-serverErr; err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("serve HTTP during shutdown: %w", err)
 		}
+		s.dependencies.Logger.Info("HTTP server stopped")
 		return nil
 	}
 }

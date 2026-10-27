@@ -19,7 +19,7 @@ sources:
 | `cmd/worker` | Background worker process, if required by a feature | Placeholder only |
 | `cmd/migrate` | Explicit database migration process, if adopted | Placeholder only |
 | `config` | Typed configuration and Viper loading | Loads and validates local/Docker settings for API, MongoDB, and auth |
-| `internal/app` | Process composition and shared dependency lifecycle | Initializes MongoDB, Redis, logging, metrics, and tracing; delegates HTTP setup and shutdown |
+| `internal/app` | Process composition and shared dependency lifecycle | Receives the configured logger; initializes MongoDB, Redis, metrics, and optional tracing; delegates HTTP setup and shutdown |
 | `internal/features` | Business capabilities and their use-case boundaries | Auth and sign-in are implemented; most other directories are empty scaffolds |
 | `internal/models` | Shared feature data and token models, named `<feature>_model.go` | User, sign-in identity, and session principal models are defined here |
 | `internal/infrastructure` | Shared vendor clients and technical adapters | MongoDB, logging, metrics, and tracing are implemented; other adapters remain placeholders |

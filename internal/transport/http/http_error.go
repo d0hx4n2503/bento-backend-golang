@@ -21,7 +21,11 @@ func NewErrorHandler(log logger.Logger) echo.HTTPErrorHandler {
 		if errors.As(err, &httpError) {
 			status = httpError.Code
 			if status >= http.StatusInternalServerError {
-				log.Errorf("HTTP request failed status=%d: %v", status, err)
+				log.Errorw("HTTP request failed",
+					"status", status,
+					"request_id", c.Response().Header().Get(echo.HeaderXRequestID),
+					"error", err,
+				)
 			}
 			if status < http.StatusInternalServerError {
 				if httpError.Message != "" {
@@ -31,7 +35,10 @@ func NewErrorHandler(log logger.Logger) echo.HTTPErrorHandler {
 				}
 			}
 		} else {
-			log.Errorf("unhandled HTTP error: %v", err)
+			log.Errorw("Unhandled HTTP error",
+				"request_id", c.Response().Header().Get(echo.HeaderXRequestID),
+				"error", err,
+			)
 		}
 		_ = c.JSON(status, map[string]any{
 			"success": false,

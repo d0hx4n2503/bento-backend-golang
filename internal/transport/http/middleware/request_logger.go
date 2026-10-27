@@ -25,7 +25,13 @@ func RequestLogger(log logger.Logger) echo.MiddlewareFunc {
 			if route == "" {
 				route = "unmatched"
 			}
-			log.Infof("http request method=%s route=%s status=%d duration=%s request_id=%s", c.Request().Method, route, status, time.Since(started), c.Response().Header().Get(echo.HeaderXRequestID))
+			log.Infow("HTTP request completed",
+				"method", c.Request().Method,
+				"route", route,
+				"status", status,
+				"duration", time.Since(started),
+				"request_id", c.Response().Header().Get(echo.HeaderXRequestID),
+			)
 			return err
 		}
 	}

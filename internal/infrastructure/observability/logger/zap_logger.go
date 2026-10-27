@@ -8,28 +8,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// Config contains the options used to construct the Zap logger.
-type Config struct {
-	Development       bool
-	DisableCaller     bool
-	DisableStacktrace bool
-	Encoding          string
-	Level             string
-}
-
-// Logger is the logging surface used by application components.
-type Logger interface {
-	Debug(args ...any)
-	Debugf(template string, args ...any)
-	Info(args ...any)
-	Infof(template string, args ...any)
-	Warn(args ...any)
-	Warnf(template string, args ...any)
-	Error(args ...any)
-	Errorf(template string, args ...any)
-	Sync() error
-}
-
 // ZapLogger adapts Zap's sugared logger to the application logger interface.
 type ZapLogger struct {
 	logger *zap.SugaredLogger
@@ -44,7 +22,7 @@ func NewZapLogger(cfg Config) (*ZapLogger, error) {
 	}
 	level, err := zapcore.ParseLevel(levelName)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("parse log level %q: %w", levelName, err)
 	}
 
 	base := zap.NewProductionConfig()
@@ -81,10 +59,26 @@ func NewZapLogger(cfg Config) (*ZapLogger, error) {
 
 func (l *ZapLogger) Debug(args ...any)                   { l.logger.Debug(args...) }
 func (l *ZapLogger) Debugf(template string, args ...any) { l.logger.Debugf(template, args...) }
-func (l *ZapLogger) Info(args ...any)                    { l.logger.Info(args...) }
-func (l *ZapLogger) Infof(template string, args ...any)  { l.logger.Infof(template, args...) }
-func (l *ZapLogger) Warn(args ...any)                    { l.logger.Warn(args...) }
-func (l *ZapLogger) Warnf(template string, args ...any)  { l.logger.Warnf(template, args...) }
+func (l *ZapLogger) Debugw(message string, keysAndValues ...any) {
+	l.logger.Debugw(message, keysAndValues...)
+}
+func (l *ZapLogger) Info(args ...any)                   { l.logger.Info(args...) }
+func (l *ZapLogger) Infof(template string, args ...any) { l.logger.Infof(template, args...) }
+func (l *ZapLogger) Infow(message string, keysAndValues ...any) {
+	l.logger.Infow(message, keysAndValues...)
+}
+func (l *ZapLogger) Warn(args ...any)                   { l.logger.Warn(args...) }
+func (l *ZapLogger) Warnf(template string, args ...any) { l.logger.Warnf(template, args...) }
+func (l *ZapLogger) Warnw(message string, keysAndValues ...any) {
+	l.logger.Warnw(message, keysAndValues...)
+}
 func (l *ZapLogger) Error(args ...any)                   { l.logger.Error(args...) }
 func (l *ZapLogger) Errorf(template string, args ...any) { l.logger.Errorf(template, args...) }
+func (l *ZapLogger) Errorw(message string, keysAndValues ...any) {
+	l.logger.Errorw(message, keysAndValues...)
+}
+func (l *ZapLogger) Fatal(args ...any)                   { l.logger.Fatal(args...) }
+func (l *ZapLogger) Fatalf(template string, args ...any) { l.logger.Fatalf(template, args...) }
 func (l *ZapLogger) Sync() error                         { return l.logger.Sync() }
+
+var _ Logger = (*ZapLogger)(nil)
