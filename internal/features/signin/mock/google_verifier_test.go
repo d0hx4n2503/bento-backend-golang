@@ -1,4 +1,4 @@
-package google
+package mock
 
 import (
 	"context"
@@ -11,15 +11,30 @@ import (
 	"testing"
 	"time"
 
+	googleProvider "github.com/d0hx4n2503/bento-backend-golang/internal/features/signin/providers/google"
 	"github.com/d0hx4n2503/bento-backend-golang/internal/models"
 )
 
-const testGoogleClientID = "bento-web.apps.googleusercontent.com"
+const (
+	testGoogleClientID       = "bento-web.apps.googleusercontent.com"
+	maxGoogleAccessTokenSize = 8 << 10
+	googleEmailScope         = "https://www.googleapis.com/auth/userinfo.email"
+)
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return f(request)
+}
+
+type tokenInfo struct {
+	Audience      string `json:"aud"`
+	Authorized    string `json:"azp"`
+	Subject       string `json:"sub"`
+	Email         string `json:"email"`
+	EmailVerified string `json:"email_verified"`
+	ExpiresAt     string `json:"exp"`
+	Scope         string `json:"scope"`
 }
 
 func TestVerifierValidatesGoogleAccessToken(t *testing.T) {
@@ -35,7 +50,7 @@ func TestVerifierValidatesGoogleAccessToken(t *testing.T) {
 		return jsonResponse(t, http.StatusOK, validTokenInfo()), nil
 	})
 
-	provider, err := NewVerifier(testGoogleClientID, client)
+	provider, err := googleProvider.NewVerifier(testGoogleClientID, client)
 	if err != nil {
 		t.Fatalf("NewVerifier() error = %v", err)
 	}
@@ -54,25 +69,26 @@ func TestVerifierRejectsInvalidTokenInfo(t *testing.T) {
 
 	tests := []struct {
 		name   string
-		change func(*tokenInfoResponse)
+		change func(*tokenInfo)
 	}{
-		{name: "wrong audience", change: func(info *tokenInfoResponse) { info.Audience = "another-client" }},
-		{name: "wrong authorized party", change: func(info *tokenInfoResponse) { info.Authorized = "another-client" }},
-		{name: "expired", change: func(info *tokenInfoResponse) {
+		{name: "wrong audience", change: func(info *tokenInfo) { info.Audience = "another-client" }},
+		{name: "wrong authorized party", change: func(info *tokenInfo) { info.Authorized = "another-client" }},
+		{name: "expired", change: func(info *tokenInfo) {
 			info.ExpiresAt = strconv.FormatInt(time.Now().Add(-time.Minute).Unix(), 10)
 		}},
-		{name: "unverified email", change: func(info *tokenInfoResponse) { info.EmailVerified = "false" }},
-		{name: "missing subject", change: func(info *tokenInfoResponse) { info.Subject = " " }},
-		{name: "missing openid scope", change: func(info *tokenInfoResponse) { info.Scope = googleEmailScope }},
-		{name: "missing email scope", change: func(info *tokenInfoResponse) { info.Scope = "openid profile" }},
+		{name: "unverified email", change: func(info *tokenInfo) { info.EmailVerified = "false" }},
+		{name: "missing subject", change: func(info *tokenInfo) { info.Subject = " " }},
+		{name: "missing openid scope", change: func(info *tokenInfo) { info.Scope = googleEmailScope }},
+		{name: "missing email scope", change: func(info *tokenInfo) { info.Scope = "openid profile" }},
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 			info := validTokenInfo()
 			test.change(&info)
-			provider, err := NewVerifier(testGoogleClientID, testClient(func(_ *http.Request) (*http.Response, error) {
+			provider, err := googleProvider.NewVerifier(testGoogleClientID, testClient(func(_ *http.Request) (*http.Response, error) {
 				return jsonResponse(t, http.StatusOK, info), nil
 			}))
 			if err != nil {
@@ -88,7 +104,7 @@ func TestVerifierRejectsInvalidTokenInfo(t *testing.T) {
 func TestVerifierRequiresOAuthClientID(t *testing.T) {
 	t.Parallel()
 
-	if _, err := NewVerifier(" ", nil); err == nil {
+	if _, err := googleProvider.NewVerifier(" ", nil); err == nil {
 		t.Fatal("NewVerifier() accepted an empty client ID")
 	}
 }
@@ -97,14 +113,14 @@ func TestVerifierRejectsOversizedAccessTokenBeforeRequest(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	provider, err := NewVerifier(testGoogleClientID, testClient(func(_ *http.Request) (*http.Response, error) {
+	provider, err := googleProvider.NewVerifier(testGoogleClientID, testClient(func(_ *http.Request) (*http.Response, error) {
 		called = true
 		return jsonResponse(t, http.StatusOK, validTokenInfo()), nil
 	}))
 	if err != nil {
 		t.Fatalf("NewVerifier() error = %v", err)
 	}
-	if _, err := provider.Verify(context.Background(), strings.Repeat("a", maxAccessTokenLength+1)); err == nil {
+	if _, err := provider.Verify(context.Background(), strings.Repeat("a", maxGoogleAccessTokenSize+1)); err == nil {
 		t.Fatal("Verify() accepted an oversized token")
 	}
 	if called {
@@ -115,7 +131,7 @@ func TestVerifierRejectsOversizedAccessTokenBeforeRequest(t *testing.T) {
 func TestVerifierDoesNotExposeTokenInTransportError(t *testing.T) {
 	t.Parallel()
 
-	provider, err := NewVerifier(testGoogleClientID, testClient(func(request *http.Request) (*http.Response, error) {
+	provider, err := googleProvider.NewVerifier(testGoogleClientID, testClient(func(request *http.Request) (*http.Response, error) {
 		return nil, fmt.Errorf("transport error for %s", request.URL.String())
 	}))
 	if err != nil {
@@ -134,7 +150,7 @@ func TestVerifierDoesNotFollowRedirects(t *testing.T) {
 	t.Parallel()
 
 	requests := 0
-	provider, err := NewVerifier(testGoogleClientID, testClient(func(request *http.Request) (*http.Response, error) {
+	provider, err := googleProvider.NewVerifier(testGoogleClientID, testClient(func(request *http.Request) (*http.Response, error) {
 		requests++
 		return &http.Response{
 			StatusCode: http.StatusFound,
@@ -158,8 +174,8 @@ func testClient(roundTrip roundTripFunc) *http.Client {
 	return &http.Client{Transport: roundTrip}
 }
 
-func validTokenInfo() tokenInfoResponse {
-	return tokenInfoResponse{
+func validTokenInfo() tokenInfo {
+	return tokenInfo{
 		Audience:      testGoogleClientID,
 		Authorized:    testGoogleClientID,
 		Subject:       "google-subject",
