@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"net/textproto"
 
+	"github.com/d0hx4n2503/bento-backend-golang/pkg/httpErrors"
 	"github.com/google/uuid"
-
 )
 
 var allowedImagesContentType = map[string]string{
