@@ -30,6 +30,74 @@ func TestNewZapLoggerWritesStructuredFields(t *testing.T) {
 			t.Errorf("logger output %q does not contain structured field %s", output, field)
 		}
 	}
+	if strings.Contains(output, "\x1b[") {
+		t.Errorf("JSON logger output contains ANSI color codes: %q", output)
+	}
+}
+
+func TestNewZapLoggerColorsConsoleLevels(t *testing.T) {
+	output := captureStderr(t, func() {
+		log, err := logger.NewZapLogger(logger.Config{
+			DisableStacktrace: true,
+			Encoding:          "console",
+			Level:             "debug",
+		})
+		if err != nil {
+			t.Fatalf("NewZapLogger() error = %v", err)
+		}
+		log.Info("colored console log")
+		log.Warn("warning console log")
+		log.Error("error console log")
+		_ = log.Sync()
+	})
+
+	for _, color := range []string{
+		"\x1b[32mINFO\x1b[0m",
+		"\x1b[33mWARN\x1b[0m",
+		"\x1b[31mERROR\x1b[0m",
+	} {
+		if !strings.Contains(output, color) {
+			t.Errorf("console logger output %q does not contain level color %q", output, color)
+		}
+	}
+	if !strings.Contains(output, "colored console log") {
+		t.Errorf("console logger output %q does not contain the log message", output)
+	}
+	if !strings.Contains(output, "\x1b[9") {
+		t.Errorf("console logger output %q does not contain a colored caller", output)
+	}
+}
+
+func TestNewZapLoggerColorsConsoleFieldKeysOnly(t *testing.T) {
+	output := captureStderr(t, func() {
+		log, err := logger.NewZapLogger(logger.Config{
+			DisableCaller:     true,
+			DisableStacktrace: true,
+			Encoding:          "console",
+			Level:             "debug",
+		})
+		if err != nil {
+			t.Fatalf("NewZapLogger() error = %v", err)
+		}
+		log.Infow("structured console log",
+			"service_name", "bento",
+			"status", 200,
+		)
+		_ = log.Sync()
+	})
+
+	coloredKeys := []string{
+		"\x1b[96m\"service_name\"\x1b[0m: \"bento\"",
+		"\x1b[96m\"status\"\x1b[0m: 200",
+	}
+	for _, key := range coloredKeys {
+		if !strings.Contains(output, key) {
+			t.Errorf("console logger output %q does not contain colored field key %q", output, key)
+		}
+	}
+	if strings.Contains(output, "\x1b[96m\"bento\"") {
+		t.Errorf("console logger output colors a field value: %q", output)
+	}
 }
 
 func TestNewZapLoggerRejectsInvalidConfiguration(t *testing.T) {
