@@ -6,7 +6,7 @@ tags: [bento-backend, golang, architecture, clean-architecture]
 sources:
   - resource: ../cmd/api/main.go
     title: API entry point scaffold
-  - resource: ../internal/features/signin/usecase.go
+  - resource: ../internal/features/sign-in/usecase.go
     title: Sign-in use case contract
   - resource: ../internal/infrastructure/observability/tracing/tracer.go
     title: OpenTelemetry initialization

@@ -142,7 +142,7 @@ func callerColor(component string) string {
 		return "\x1b[93m"
 	case "middleware":
 		return "\x1b[95m"
-	case "signin":
+	case "sign-in":
 		return "\x1b[94m"
 	}
 

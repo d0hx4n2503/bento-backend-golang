@@ -91,6 +91,10 @@ func NewServer(cfg config.Config, dependencies Dependencies) (*Server, error) {
 	if err := mapSwaggerRoutes(e); err != nil {
 		return nil, fmt.Errorf("map Swagger routes: %w", err)
 	}
+	dependencies.Logger.Infow("Swagger documentation routes registered",
+		"ui_path", "/swagger/",
+		"openapi_path", "/swagger/openapi.json",
+	)
 
 	return &Server{echo: e, cfg: cfg, dependencies: dependencies}, nil
 }
@@ -127,7 +131,7 @@ func (s *Server) Run(ctx context.Context) error {
 	serverErr := make(chan error, 1)
 	go func() {
 		s.dependencies.Logger.Infow("HTTP server listening",
-			"address", address,
+			"port", address,
 			"version", s.cfg.Server.AppVersion,
 		)
 		serverErr <- server.Serve(listener)
