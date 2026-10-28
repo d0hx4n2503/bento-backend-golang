@@ -14,6 +14,7 @@ This index links to the maintained documentation for the Go backend. Pages disti
 - [Reusable packages](reusable-packages.md): current shared code, ownership rules, and how to avoid duplicate helpers.
 - [Data and storage](data-and-storage.md): MongoDB direction, repository boundaries, and migration expectations.
 - [Configuration and observability](configuration-and-observability.md): configuration loading, logging, metrics, and tracing.
+- [OpenAPI reference](openapi/openapi.json): machine-readable documentation for currently registered HTTP routes; served with Swagger UI at `/swagger/`.
 
 ## Current maturity
 

@@ -26,7 +26,7 @@ sources:
 | `internal/transport/http` | HTTP server, feature wiring, route groups, shared middleware, and response mapping | Server lifecycle, auth/sign-in wiring, health/metrics, error mapping, auth/CSRF/logging/metrics middleware, and tracing adapter are implemented |
 | `migrations` | Versioned database schema/index changes | MongoDB and PostgreSQL directories are placeholders |
 | `pkg` | Reusable packages that are intentionally exported from this module | A few utilities exist; see [Reusable packages](reusable-packages.md) |
-| `docs` | Architecture and implementation documentation | This documentation set |
+| `docs` | Architecture, implementation, and API documentation | OpenAPI reference and Swagger UI assets are embedded in the API binary |
 
 ## Feature names and NestJS references
 

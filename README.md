@@ -25,5 +25,8 @@ make run
 - `POST /api/v1/auth/admin-login` — optional admin login, enabled when admin credentials are configured.
 - `GET /api/health` — API and MongoDB readiness.
 - `GET /metrics` — Prometheus metrics.
+- `GET /swagger/` — interactive Swagger UI; `GET /swagger/openapi.json` serves the OpenAPI document.
+
+The Swagger UI loads its static interface assets from the pinned Swagger UI distribution on unpkg. The OpenAPI document itself is embedded in the API binary and served by the Go backend.
 
 In production, provide MongoDB settings, RS256 key paths, the exact browser origins, and—when CSRF is enabled—a dedicated CSRF secret of at least 32 bytes through environment or deployment secrets. Keep private key files and secrets out of source control.

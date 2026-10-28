@@ -88,6 +88,9 @@ func NewServer(cfg config.Config, dependencies Dependencies) (*Server, error) {
 	e.GET("/", func(c *echo.Context) error {
 		return c.JSON(http.StatusOK, map[string]string{"service": "bento-backend-golang", "version": cfg.Server.AppVersion})
 	})
+	if err := mapSwaggerRoutes(e); err != nil {
+		return nil, fmt.Errorf("map Swagger routes: %w", err)
+	}
 
 	return &Server{echo: e, cfg: cfg, dependencies: dependencies}, nil
 }
